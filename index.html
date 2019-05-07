@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Česká Pirátská Strana - Organizační struktura</title>
+    <style type="text/css">
+        .container {
+            width: 100%;
+        }
+
+        select {
+            width: 100%;
+            font-size: 1.5em;
+            padding: 10px;
+            margin: 4px 0;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+<h1>Organizační struktura - Česká Pirátská Strana</h1>
+<select id="rootselect">
+</select>
+<div id="rendercontainer" class="w-100" style="border: 1px solid black; min-height: 30em;">
+
+</div>
+
+</div>
+<script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.5.5/cytoscape.min.js"></script>
+<script src="https://unpkg.com/dagre@0.7.4/dist/dagre.js"></script>
+<script src="https://cytoscape.org/cytoscape.js-dagre/cytoscape-dagre.js"></script>
+
+<script type="text/javascript">
+
+</script>
+<script type="text/javascript">
+    var cy;
+    var myElements = [];
+    var members = [];
+    var subtrees = {};
+    var currentSubtree = -1;
+    var dagreLayout = {
+        name: 'dagre',
+        circle: false,
+        animate: true,
+        spacingFactor: 1,
+        nodeDimensionsIncludeLabels: true,
+        directed: true,
+        rankDir: 'TB',
+        fit: true
+    };
+
+    var xhr_institution;
+    var xhr_users;
+    var processed = 0;
+
+    function process() {
+        processed++;
+        if (processed >= 2) {
+            for (let institution in xhr_institution) {
+                if (!xhr_institution.hasOwnProperty(institution)) {
+                    continue;
+                }
+                institution = xhr_institution[institution];
+                myElements.push({
+                    group: 'nodes',
+                    data: {
+                        id: institution.url,
+                        code: institution.code,
+                        label: institution.name,
+                        parent_instution: institution.parent
+                    }
+                });
+                if (institution.parent) {
+                    myElements.push({
+                        group: 'edges',
+                        data: {
+                            id: institution.code,
+                            source: institution.parent,
+                            target: institution.url,
+                            members: institution.members
+                        }
+                    });
+                }
+            }
+            for (let user in xhr_users) {
+                if (!xhr_users.hasOwnProperty(user)) {
+                    continue;
+                }
+                user = xhr_users[user];
+                members[user.url] = user;
+            }
+            initCY();
+
+            var roots = cy.nodes().roots();
+            for (var root in roots) {
+                if (!roots.hasOwnProperty(root)) {
+                    continue;
+                }
+                root = roots[root];
+                if (typeof root !== 'object')
+                    break;
+
+                var subtree = cy.$id(root.id()).successors();
+                subtree = subtree.add(cy.$id(root.id()));
+
+                subtrees[root.id()] = subtree;
+                $("#rootselect").append(new Option(root.data().label, root.id()));
+            }
+            setTimeout(showSubtree, 500);
+        }
+    }
+
+    function showSubtree() {
+        if (currentSubtree === -1) {
+            let keys = Object.keys(subtrees);
+            if (keys.length > 0) {
+                currentSubtree = keys[0];
+            }
+        }
+        if (currentSubtree === -1) {
+            console.log("currentSubtree still -1");
+            return;
+        }
+        cy.nodes().remove();
+        cy.add(subtrees[currentSubtree]);
+        cy.layout(dagreLayout).run();
+        cy.fit();
+    }
+
+    function initCY() {
+        cy = cytoscape({
+            container: document.getElementById('rendercontainer'),
+            elements: myElements,
+
+            layout: dagreLayout,
+
+            autoungrabify: false,
+            pixelRatio: 2,
+
+            style: [ // the stylesheet for the graph
+                {
+                    selector: 'node',
+                    style: {
+                        'background-color': '#FFF',
+                        'label': 'data(label)',
+                        'shape': 'rectangle',
+                        'width': 'label',
+                        'height': 'label',
+                        'padding': '1em',
+                        'color': '#000',
+                        'font-family': 'Arial',
+                        'font-weight': 400,
+                        'font-size': 20,
+                        'text-halign': 'center',
+                        'text-valign': 'center',
+                        'border-color': 'green',
+                        'border-width': 1
+                    }
+                },
+                {
+                    selector: '.rlp',
+                    style: {
+                        'border-color': 'green',
+                        'border-width': 3
+                    }
+                },
+                {
+                    selector: '.nullGroup',
+                    style: {
+                        'border-color': 'red',
+                        'border-width': 2
+                    }
+                },
+                {
+                    selector: '.correctGroup.undefined',
+                    style: {
+                        'border-color': 'orange',
+                        'border-width': 2
+                    }
+                },
+                {
+                    selector: 'edge',
+                    style: {
+                        'curve-style': 'straight',
+                        'line-color': '#ccc',
+                        'target-arrow-color': '#ccc',
+                        'target-arrow-shape': 'triangle',
+                        'text-outline-color': 'white',
+                        'text-outline-width': 2,
+                    }
+                },
+                {
+                    selector: '.highgreenedge',
+                    style: {
+                        'line-color': 'green',
+                        'target-arrow-color': 'green',
+                        'color': 'green',
+                        'font-weight': 800,
+                        'z-index': 1000
+                    }
+                },
+                {
+                    selector: '.highblueedge',
+                    style: {
+                        'line-color': 'blue',
+                        'target-arrow-color': 'blue',
+                        'color': 'blue',
+                        'font-weight': 800,
+                        'z-index': 1000
+                    }
+                }
+            ]
+        });
+    }
+
+    $(document).ready(function () {
+        $("#rootselect").on('change', function(){
+            currentSubtree = $(this).val();
+            showSubtree();
+        });
+
+        // "https://cors-anywhere.herokuapp.com/https://piroplaceni.pirati.cz/rest/institution/"
+        $.getJSON('https://cors-anywhere.herokuapp.com/https://piroplaceni.pirati.cz/rest/institution/', function (data) {
+            xhr_institution = data;
+            process();
+        });
+        // https://cors-anywhere.herokuapp.com/https://piroplaceni.pirati.cz/rest/users/
+        $.getJSON("https://cors-anywhere.herokuapp.com/https://piroplaceni.pirati.cz/rest/users/", function (data) {
+            xhr_users = data;
+            process();
+        });
+    });
+</script>
+</body>
+</html>
+
