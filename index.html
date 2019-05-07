@@ -8,6 +8,7 @@
     <style type="text/css">
         .container {
             width: 100%;
+	    overflow-x: hidden;
         }
 
         select {
@@ -16,16 +17,35 @@
             padding: 10px;
             margin: 4px 0;
         }
+
+        table, tr, td {
+            border: 1px solid black;
+            border-collapse: collapse;
+        }
+
+        table {
+            width: 100%;
+        }
+
+        td {
+            padding: 0.5em;
+        }
     </style>
 </head>
 <body>
 <div class="container">
-<h1>Organizační struktura - Česká Pirátská Strana</h1>
-<select id="rootselect">
-</select>
-<div id="rendercontainer" class="w-100" style="border: 1px solid black; min-height: 30em;">
+    <h1>Organizační struktura - Česká Pirátská Strana</h1>
+    <select id="rootselect">
+    </select>
+    <div id="rendercontainer" class="w-100" style="border: 1px solid black; min-height: 30em;">
 
-</div>
+    </div>
+    <br/>
+    <table id="detailtable">
+        <tbody>
+
+        </tbody>
+    </table>
 
 </div>
 <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
@@ -34,16 +54,14 @@
 <script src="https://cytoscape.org/cytoscape.js-dagre/cytoscape-dagre.js"></script>
 
 <script type="text/javascript">
-
-</script>
-<script type="text/javascript">
     var cy;
+    var lastClick;
     var myElements = [];
     var members = [];
     var subtrees = {};
     var currentSubtree = -1;
     var dagreLayout = {
-        name: 'dagre',
+        name: 'breadthfirst',
         circle: false,
         animate: true,
         spacingFactor: 1,
@@ -60,7 +78,7 @@
     function process() {
         processed++;
         if (processed >= 2) {
-            for (let institution in xhr_institution) {
+            for (var institution in xhr_institution) {
                 if (!xhr_institution.hasOwnProperty(institution)) {
                     continue;
                 }
@@ -70,8 +88,10 @@
                     data: {
                         id: institution.url,
                         code: institution.code,
-                        label: institution.name,
-                        parent_instution: institution.parent
+                        name: institution.name,
+                        label: institution.name + (institution.members === undefined ? '' : ' (' + institution.members.length + ')'),
+                        parent_instution: institution.parent,
+                        members: institution.members
                     }
                 });
                 if (institution.parent) {
@@ -80,13 +100,12 @@
                         data: {
                             id: institution.code,
                             source: institution.parent,
-                            target: institution.url,
-                            members: institution.members
+                            target: institution.url
                         }
                     });
                 }
             }
-            for (let user in xhr_users) {
+            for (var user in xhr_users) {
                 if (!xhr_users.hasOwnProperty(user)) {
                     continue;
                 }
@@ -108,7 +127,7 @@
                 subtree = subtree.add(cy.$id(root.id()));
 
                 subtrees[root.id()] = subtree;
-                $("#rootselect").append(new Option(root.data().label, root.id()));
+                $("#rootselect").append(new Option(root.data().name, root.id()));
             }
             setTimeout(showSubtree, 500);
         }
@@ -116,19 +135,42 @@
 
     function showSubtree() {
         if (currentSubtree === -1) {
-            let keys = Object.keys(subtrees);
+            var keys = Object.keys(subtrees);
             if (keys.length > 0) {
                 currentSubtree = keys[0];
             }
         }
         if (currentSubtree === -1) {
-            console.log("currentSubtree still -1");
             return;
         }
         cy.nodes().remove();
         cy.add(subtrees[currentSubtree]);
         cy.layout(dagreLayout).run();
         cy.fit();
+    }
+
+    function renderNode() {
+        var $table = $("#detailtable tbody");
+        $table.empty();
+
+        var $this = lastClick.target.data();
+
+        $table.append("<tr><td>Organizační jednotka</td><td><strong>" + $this.name + "</strong></td></tr>");
+
+        if ($this.members) {
+            $table.append("<tr><td>Členové:</td><td></td></tr>");
+
+            for (var memberKey in $this.members) {
+                if (!$this.members.hasOwnProperty(memberKey)) {
+                    continue;
+                }
+                var memberId = $this.members[memberKey];
+                var member = members[memberId];
+                if (member) {
+                    $table.append("<tr><td></td><td>" + member.first_name + " " + member.last_name + "</td></tr>");
+                }
+            }
+        }
     }
 
     function initCY() {
@@ -162,27 +204,6 @@
                     }
                 },
                 {
-                    selector: '.rlp',
-                    style: {
-                        'border-color': 'green',
-                        'border-width': 3
-                    }
-                },
-                {
-                    selector: '.nullGroup',
-                    style: {
-                        'border-color': 'red',
-                        'border-width': 2
-                    }
-                },
-                {
-                    selector: '.correctGroup.undefined',
-                    style: {
-                        'border-color': 'orange',
-                        'border-width': 2
-                    }
-                },
-                {
                     selector: 'edge',
                     style: {
                         'curve-style': 'straight',
@@ -190,45 +211,27 @@
                         'target-arrow-color': '#ccc',
                         'target-arrow-shape': 'triangle',
                         'text-outline-color': 'white',
-                        'text-outline-width': 2,
-                    }
-                },
-                {
-                    selector: '.highgreenedge',
-                    style: {
-                        'line-color': 'green',
-                        'target-arrow-color': 'green',
-                        'color': 'green',
-                        'font-weight': 800,
-                        'z-index': 1000
-                    }
-                },
-                {
-                    selector: '.highblueedge',
-                    style: {
-                        'line-color': 'blue',
-                        'target-arrow-color': 'blue',
-                        'color': 'blue',
-                        'font-weight': 800,
-                        'z-index': 1000
+                        'text-outline-width': 2
                     }
                 }
             ]
         });
+        cy.on('click', 'node', function (evt) {
+            lastClick = evt;
+            renderNode();
+        });
     }
 
     $(document).ready(function () {
-        $("#rootselect").on('change', function(){
+        $("#rootselect").on('change', function () {
             currentSubtree = $(this).val();
             showSubtree();
         });
 
-        // "https://cors-anywhere.herokuapp.com/https://piroplaceni.pirati.cz/rest/institution/"
         $.getJSON('https://cors-anywhere.herokuapp.com/https://piroplaceni.pirati.cz/rest/institution/', function (data) {
             xhr_institution = data;
             process();
         });
-        // https://cors-anywhere.herokuapp.com/https://piroplaceni.pirati.cz/rest/users/
         $.getJSON("https://cors-anywhere.herokuapp.com/https://piroplaceni.pirati.cz/rest/users/", function (data) {
             xhr_users = data;
             process();
